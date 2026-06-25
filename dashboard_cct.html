@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard CCT · Cadena de Suministro</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #EEF2F8; color: #111827; }
+  button { font-family: inherit; cursor: pointer; }
+  select { font-family: inherit; }
+  table { border-collapse: collapse; width: 100%; }
+  ::-webkit-scrollbar { height: 6px; width: 6px; }
+  ::-webkit-scrollbar-track { background: #EEF2F8; }
+  ::-webkit-scrollbar-thumb { background: #D1DDEF; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo } = React;
+const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } = Recharts;
+
+const HOY_MES = 6;
+const HOY_DIA = 25;
+
+function mesGrafica(mes_rev, mes_venc) {
+  if (mes_rev === null) return mes_venc;
+  if (mes_rev === 12) return 1;
+  return mes_rev;
+}
+
+function calcDiasEspera(row) {
+  if (row.dias != null) return { valor: row.dias, esEspera: false };
+  if (row.est_rev === "Realizada" && row.mes_rev != null &&
+      (row.est_cons === "Pendiente" || row.est_cons === "Programada") &&
+      row.tipo_rev === "Integral") {
+    const mr = row.mes_rev === 12 ? 1 : row.mes_rev;
+    const diasMes = [31,28,31,30,31,30,31,31,30,31,30,31];
+    let d = 0;
+    for (let m = mr; m < HOY_MES; m++) d += diasMes[m-1];
+    d += HOY_DIA - 15;
+    return { valor: Math.max(0, d), esEspera: true };
+  }
+  return { valor: null, esEspera: false };
+}
+
+const RAW = [
+  { udn:"CEDIS", cluster:"Centro",   plaza:"Aguascalientes",              tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.85, apro:0.93, hc:227, mes_rev:5,  mes_venc:7,  dias:29,   sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"CEDIS", cluster:"Centro",   plaza:"Durango",                     tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:11,  mes_rev:2,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Centro",   plaza:"Azcapotzalco",                tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:227, mes_rev:1,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Chihuahua",                   tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.76, apro:0.90, hc:191, mes_rev:1,  mes_venc:2,  dias:103,  sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Ciudad Juárez",               tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.93, apro:0.84, hc:15,  mes_rev:1,  mes_venc:1,  dias:108,  sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Culiacán",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:130, mes_rev:4,  mes_venc:4,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Escobedo",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:387, mes_rev:2,  mes_venc:1,  dias:null, sindicato:"FNSI",    resp_sind:"Ruben Olvera",                       anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Nuevo Laredo",                tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:14,  mes_rev:12, mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Piedras Negras",              tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:14,  mes_rev:12, mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Guadalupe",                   tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:330, mes_rev:1,  mes_venc:1,  dias:null, sindicato:"FNSI",    resp_sind:"Ruben Olvera",                       anio:2026 },
+  { udn:"CEDIS", cluster:"Centro",   plaza:"León",                        tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:163, mes_rev:2,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Cancún",                      tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.91, apro:1.00, hc:40,  mes_rev:2,  mes_venc:3,  dias:48,   sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Mérida",                      tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.83, apro:0.93, hc:277, mes_rev:1,  mes_venc:1,  dias:138,  sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Ensenada",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:13,  mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Daniel Rivera",                      anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Mexicali",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:264, mes_rev:12, mes_venc:1,  dias:null, sindicato:"FROC",    resp_sind:"Daniel Rivera",                      anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Hermosillo + Santa Ana",      tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:69,  mes_rev:6,  mes_venc:6,  dias:null, sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"La Paz",                      tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Pendiente",  part:null, apro:null, hc:73,  mes_rev:6,  mes_venc:6,  dias:null, sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Obregón",                     tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:345, mes_rev:3,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Puebla",                      tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:236, mes_rev:5,  mes_venc:6,  dias:null, sindicato:"CONASIM", resp_sind:"Victor Hugo Mandujano Zamudio",       anio:2026 },
+  { udn:"CEDIS", cluster:"Centro",   plaza:"Querétaro + SLP",             tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:322, mes_rev:5,  mes_venc:6,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Reynosa",                     tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.84, apro:0.86, hc:113, mes_rev:1,  mes_venc:1,  dias:93,   sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Gomez Palacio",               tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:20,  mes_rev:1,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Monclova",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:17,  mes_rev:1,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Saltillo",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:262, mes_rev:1,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"CEDIS", cluster:"Centro",   plaza:"SMO",                         tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:639, mes_rev:1,  mes_venc:2,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Poza Rica",                   tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:5,   mes_rev:5,  mes_venc:7,  dias:null, sindicato:"CONASIM", resp_sind:"Victor Hugo Mandujano Zamudio",       anio:2026 },
+  { udn:"CEDIS", cluster:"Norte",    plaza:"Tampico",                     tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:171, mes_rev:5,  mes_venc:7,  dias:null, sindicato:"CTM",     resp_sind:"Eduardo Eng",                        anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Tijuana",                     tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:322, mes_rev:12, mes_venc:1,  dias:null, sindicato:"FROC",    resp_sind:"Daniel Rivera",                      anio:2026 },
+  { udn:"CEDIS", cluster:"Pacífico", plaza:"Tlajomulco + Colima + PV",   tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:498, mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Toluca + Aca + Chilp + Mor", tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Programada", part:null, apro:null, hc:388, mes_rev:5,  mes_venc:6,  dias:45,   sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Veracruz",                    tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.90, apro:1.00, hc:149, mes_rev:2,  mes_venc:2,  dias:42,   sindicato:"CONASIM", resp_sind:"Victor Hugo Mandujano Zamudio",       anio:2026 },
+  { udn:"CEDIS", cluster:"Sureste",  plaza:"Villahermosa",                tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:226, mes_rev:12, mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Aguascalientes",          tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:71,  mes_rev:2,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Durango",                 tipo_rev:"Contrato Inicial",est_rev:"Realizada", est_cons:"Pendiente",  part:null, apro:null, hc:26,  mes_rev:4,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Azcapotzalco",            tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.79, apro:0.97, hc:133, mes_rev:3,  mes_venc:1,  dias:90,   sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Chihuahua",               tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.60, apro:0.95, hc:72,  mes_rev:1,  mes_venc:1,  dias:101,  sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Ciudad Juárez",           tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.97, apro:0.95, hc:78,  mes_rev:1,  mes_venc:1,  dias:106,  sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Culiacán",                tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:68,  mes_rev:4,  mes_venc:4,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Nuevo Laredo",            tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:43,  mes_rev:6,  mes_venc:6,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Piedras Negras",          tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:25,  mes_rev:4,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Escobedo + Guadalupe",    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:353, mes_rev:2,  mes_venc:1,  dias:null, sindicato:"FNSI",    resp_sind:"Ruben Olvera",                       anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"León",                    tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:121, mes_rev:3,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Cancún",                  tipo_rev:"Integral",        est_rev:"Pendiente", est_cons:"Pendiente",  part:null, apro:null, hc:101, mes_rev:null,mes_venc:8, dias:null, sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Mérida",                  tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:99,  mes_rev:2,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Mexicali",                tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:112, mes_rev:1,  mes_venc:1,  dias:null, sindicato:"FROC",    resp_sind:"Daniel Rivera",                      anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Hermosillo",              tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Programada", part:null, apro:null, hc:46,  mes_rev:5,  mes_venc:5,  dias:76,   sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"La Paz",                  tipo_rev:"Salarial",        est_rev:"Pendiente", est_cons:null,         part:null, apro:null, hc:77,  mes_rev:null,mes_venc:10,dias:null, sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Obregón",                 tipo_rev:"Integral",        est_rev:"Pendiente", est_cons:"Pendiente",  part:null, apro:null, hc:71,  mes_rev:null,mes_venc:10,dias:null, sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Santa Ana",               tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Programada", part:null, apro:null, hc:34,  mes_rev:5,  mes_venc:5,  dias:68,   sindicato:"CONASIM", resp_sind:"Hector Enrique Pérez Montes",        anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Puebla",                  tipo_rev:"Salarial",        est_rev:"Pendiente", est_cons:null,         part:null, apro:null, hc:161, mes_rev:null,mes_venc:9, dias:null, sindicato:"CONASIM", resp_sind:"Victor Hugo Mandujano Zamudio",       anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Querétaro + SLP",         tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:193, mes_rev:5,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Reynosa",                 tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Realizada",  part:0.87, apro:0.97, hc:39,  mes_rev:2,  mes_venc:3,  dias:92,   sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Saltillo + Monclova",     tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:138, mes_rev:2,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Gomez Palacio",           tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:48,  mes_rev:4,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Cuernavaca",              tipo_rev:"Contrato Inicial",est_rev:"Realizada", est_cons:"Pendiente",  part:null, apro:null, hc:70,  mes_rev:4,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Edmundo García Martínez",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"SMO + Chalco + Pachuca",  tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:349, mes_rev:5,  mes_venc:5,  dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Tampico",                 tipo_rev:"Integral",        est_rev:"Pendiente", est_cons:"Pendiente",  part:null, apro:null, hc:98,  mes_rev:null,mes_venc:9, dias:null, sindicato:"CONASIM", resp_sind:"Cesar Fernando González Rodríguez", anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Tijuana",                 tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:164, mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Daniel Rivera",                      anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Colima",                  tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:27,  mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"Distribución", cluster:"Norte", plaza:"Tlajomulco",              tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:220, mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Puerto Vallarta",         tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:41,  mes_rev:1,  mes_venc:1,  dias:null, sindicato:"CONASIM", resp_sind:"Cesar Omar Cortés Castellanos",      anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Acapulco + Chilpancingo", tipo_rev:"Salarial",        est_rev:"Pendiente", est_cons:null,         part:null, apro:null, hc:76,  mes_rev:null,mes_venc:10,dias:null, sindicato:"CONASIM", resp_sind:"Edmundo García Martínez",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Morelia",                 tipo_rev:"Salarial",        est_rev:"Pendiente", est_cons:null,         part:null, apro:null, hc:68,  mes_rev:null,mes_venc:8, dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Toluca",                  tipo_rev:"Integral",        est_rev:"Pendiente", est_cons:"Pendiente",  part:null, apro:null, hc:92,  mes_rev:null,mes_venc:8, dias:null, sindicato:"CONASIM", resp_sind:"Jorge López Tovar",                  anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Veracruz",                tipo_rev:"Salarial",        est_rev:"Pendiente", est_cons:null,         part:null, apro:null, hc:94,  mes_rev:null,mes_venc:9, dias:null, sindicato:"CONASIM", resp_sind:"Victor Hugo Mandujano Zamudio",       anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Salina Cruz",             tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Programada", part:null, apro:null, hc:41,  mes_rev:5,  mes_venc:5,  dias:75,   sindicato:"CONASIM", resp_sind:"Edmundo García Martínez",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Tapachula",               tipo_rev:"Integral",        est_rev:"Realizada", est_cons:"Pendiente",  part:null, apro:null, hc:61,  mes_rev:6,  mes_venc:7,  dias:null, sindicato:"CONASIM", resp_sind:"Edmundo García Martínez",            anio:2026 },
+  { udn:"Distribución", cluster:"Sur",   plaza:"Villahermosa",            tipo_rev:"Salarial",        est_rev:"Realizada", est_cons:null,         part:null, apro:null, hc:136, mes_rev:3,  mes_venc:3,  dias:null, sindicato:"CONASIM", resp_sind:"Gerardo Tejeda Castillo",            anio:2026 },
+];
+
+const YEARS  = [...new Set(RAW.map(d=>d.anio))].sort();
+const MONTHS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const CEDIS_CLUSTERS = ["Todos","Centro","Norte","Pacífico","Sureste"];
+const DIST_REGIONES  = ["Todos","Norte","Sur"];
+const C = {
+  navy:"#0F2B5B", navyL:"#1B3A6B", accent:"#E8531A",
+  mint:"#1E9E6B", sky:"#2271D1", amber:"#F0933A",
+  purple:"#7C52C8", teal:"#0D8FA0", red:"#DC2626",
+  bg:"#EEF2F8", card:"#FFFFFF", border:"#D1DDEF",
+  text:"#111827", muted:"#5D718A",
+};
+const pct    = v => v!=null ? `${(v*100).toFixed(0)}%` : "—";
+const round1 = v => v!=null ? v.toFixed(1) : "—";
+const avg    = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+const colorFor = v => v<0.70 ? "#DC2626" : v<0.85 ? "#D97706" : "#1E9E6B";
+const consColor = s => ({Realizada:C.mint,Pendiente:C.amber,Programada:C.sky}[s]||C.muted);
+
+function Tag({label,color}) {
+  return <span style={{background:color+"22",color,border:`1px solid ${color}55`,borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{label}</span>;
+}
+function KPI({label,value,sub,color=C.navy}) {
+  return (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",flex:1,minWidth:130,borderTop:`3px solid ${color}`}}>
+      <div style={{fontSize:10,fontWeight:800,letterSpacing:1.2,color:C.muted,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+      <div style={{fontSize:28,fontWeight:900,color,lineHeight:1.1,marginBottom:2}}>{value}</div>
+      {sub&&<div style={{fontSize:11,color:C.muted}}>{sub}</div>}
+    </div>
+  );
+}
+function Sec({title,children,style={}}) {
+  return (
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 22px",marginBottom:16,...style}}>
+      <div style={{fontSize:11,fontWeight:800,color:C.navy,letterSpacing:1.2,textTransform:"uppercase",borderBottom:`2px solid ${C.accent}`,paddingBottom:5,marginBottom:14,display:"inline-block"}}>{title}</div>
+      {children}
+    </div>
+  );
+}
+const TH = ({children,center}) => <th style={{padding:"7px 11px",textAlign:center?"center":"left",color:C.navy,fontWeight:800,fontSize:10,letterSpacing:.8,textTransform:"uppercase",borderBottom:`2px solid ${C.border}`,whiteSpace:"nowrap"}}>{children}</th>;
+const TD = ({children,center,style={}}) => <td style={{padding:"8px 11px",textAlign:center?"center":"left",...style}}>{children}</td>;
+const Tip = ({active,payload,label}) => {
+  if(!active||!payload?.length) return null;
+  return <div style={{background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 13px",fontSize:12,boxShadow:"0 4px 12px #0002"}}><div style={{fontWeight:700,marginBottom:3}}>{label}</div>{payload.map((p,i)=><div key={i} style={{color:p.color||C.text}}>{p.name}: <b>{p.value}</b></div>)}</div>;
+};
+
+function FilterBtn({label,active,color,onClick}) {
+  return <button onClick={onClick} style={{padding:"4px 13px",borderRadius:20,fontWeight:600,fontSize:11,transition:"all .15s",border:`1px solid ${active?color:C.border}`,background:active?color:C.card,color:active?"#fff":C.text}}>{label}</button>;
+}
+
+function Dashboard() {
+  const [anio,setAnio]=useState(2026);
+  const [tab,setTab]=useState("Consolidado");
+  const [fGeo,setFGeo]=useState("Todos");
+  const [fSind,setFSind]=useState("Todos");
+  const [fResp,setFResp]=useState("Todos");
+
+  const base = useMemo(()=>RAW.filter(d=>d.anio===anio),[anio]);
+  const geoOpts = tab==="CEDIS"?CEDIS_CLUSTERS:tab==="Distribución"?DIST_REGIONES:["Todos"];
+  const byOp = useMemo(()=>tab==="Consolidado"?base:base.filter(r=>r.udn===tab),[base,tab]);
+  const sinds = useMemo(()=>["Todos",...new Set(byOp.map(d=>d.sindicato))].sort(),[byOp]);
+  const resps = useMemo(()=>["Todos",...new Set(byOp.map(d=>d.resp_sind))].sort(),[byOp]);
+  const data = useMemo(()=>{
+    let d=byOp;
+    if(fGeo!=="Todos") d=d.filter(r=>r.cluster===fGeo);
+    if(fSind!=="Todos") d=d.filter(r=>r.sindicato===fSind);
+    if(fResp!=="Todos") d=d.filter(r=>r.resp_sind===fResp);
+    return d;
+  },[byOp,fGeo,fSind,fResp]);
+
+  const handleTab = t=>{setTab(t);setFGeo("Todos");setFSind("Todos");setFResp("Todos");};
+
+  const total=data.length, cedisD=data.filter(d=>d.udn==="CEDIS"), distD=data.filter(d=>d.udn==="Distribución");
+  const ints=data.filter(d=>d.tipo_rev==="Integral"), sals=data.filter(d=>d.tipo_rev==="Salarial"), inics=data.filter(d=>d.tipo_rev==="Contrato Inicial");
+  const cInt=ints.filter(r=>r.part!=null);
+  const avgPart=avg(cInt.map(r=>r.part)), avgApro=avg(cInt.map(r=>r.apro));
+  const intDias=ints.map(r=>calcDiasEspera(r)).filter(x=>x.valor!=null);
+  const avgDias=avg(intDias.map(x=>x.valor)), avgHC=avg(data.map(r=>r.hc));
+
+  const monthData=useMemo(()=>MONTHS.map((m,i)=>{
+    const mes=i+1;
+    const revC=data.filter(d=>d.udn==="CEDIS"&&d.mes_rev!=null&&mesGrafica(d.mes_rev,d.mes_venc)===mes).length;
+    const revD=data.filter(d=>d.udn==="Distribución"&&d.mes_rev!=null&&mesGrafica(d.mes_rev,d.mes_venc)===mes).length;
+    const vencC=data.filter(d=>d.udn==="CEDIS"&&d.mes_rev==null&&d.mes_venc===mes).length;
+    const vencD=data.filter(d=>d.udn==="Distribución"&&d.mes_rev==null&&d.mes_venc===mes).length;
+    return {mes:m,"Rev CEDIS":revC,"Rev Dist":revD,"Venc CEDIS":vencC,"Venc Dist":vencD};
+  }),[data]);
+
+  const opSum=useMemo(()=>{
+    const ops=tab==="Consolidado"?["CEDIS","Distribución"]:[tab];
+    return ops.map(op=>{const d=data.filter(x=>x.udn===op);return{op,total:d.length,integral:d.filter(x=>x.tipo_rev==="Integral").length,salarial:d.filter(x=>x.tipo_rev==="Salarial").length,inicial:d.filter(x=>x.tipo_rev==="Contrato Inicial").length};});
+  },[data,tab]);
+
+  const sindT=useMemo(()=>{const m={};data.forEach(d=>{if(!m[d.sindicato])m[d.sindicato]={total:0,cedis:0,dist:0};m[d.sindicato].total++;if(d.udn==="CEDIS")m[d.sindicato].cedis++;else m[d.sindicato].dist++;});return Object.entries(m).sort((a,b)=>b[1].total-a[1].total).map(([k,v])=>({sind:k,...v}));},[data]);
+  const respT=useMemo(()=>{const m={};data.forEach(d=>{if(!m[d.resp_sind])m[d.resp_sind]={total:0,cedis:0,dist:0};m[d.resp_sind].total++;if(d.udn==="CEDIS")m[d.resp_sind].cedis++;else m[d.resp_sind].dist++;});return Object.entries(m).sort((a,b)=>b[1].total-a[1].total).map(([k,v])=>({resp:k,...v}));},[data]);
+  const hcData=useMemo(()=>data.filter(d=>d.hc>0).sort((a,b)=>b.hc-a.hc).slice(0,15).map(d=>({name:d.plaza.length>22?d.plaza.slice(0,20)+"…":d.plaza,HC:d.hc,udn:d.udn})),[data]);
+
+  const showC=tab!=="Distribución", showD=tab!=="CEDIS";
+  const chartH=Math.max(160,cInt.length*44);
+
+  return (
+    <div style={{background:C.bg,minHeight:"100vh",fontSize:13}}>
+      {/* HEADER */}
+      <div style={{background:`linear-gradient(135deg,${C.navy},${C.navyL})`,padding:"0 24px"}}>
+        <div style={{maxWidth:1300,margin:"0 auto",height:58,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:32,height:32,background:C.accent,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"#fff",fontSize:16,fontWeight:900}}>◆</span></div>
+            <div><div style={{color:"#fff",fontWeight:800,fontSize:15}}>Contratos Colectivos · Cadena de Suministro</div><div style={{color:"#7FAAD8",fontSize:10,letterSpacing:1.2}}>DASHBOARD LABORAL 2026</div></div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:"#7FAAD8",fontSize:12,fontWeight:600}}>Año</span>
+            <select value={anio} onChange={e=>setAnio(+e.target.value)} style={{background:"#1C3F78",color:"#fff",border:"1px solid #3A6FAF",borderRadius:7,padding:"5px 12px",fontSize:13,fontWeight:700}}>
+              {YEARS.map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* TABS */}
+      <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:"0 24px"}}>
+        <div style={{maxWidth:1300,margin:"0 auto",display:"flex"}}>
+          {["Consolidado","CEDIS","Distribución"].map(t=>(
+            <button key={t} onClick={()=>handleTab(t)} style={{padding:"13px 26px",border:"none",fontWeight:700,fontSize:13,background:"transparent",borderBottom:tab===t?`3px solid ${C.accent}`:"3px solid transparent",color:tab===t?C.accent:C.muted}}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{maxWidth:1300,margin:"0 auto",padding:"18px 24px"}}>
+
+        {/* FILTROS */}
+        <div style={{display:"flex",gap:16,marginBottom:16,flexWrap:"wrap",alignItems:"flex-start"}}>
+          {tab!=="Consolidado"&&(
+            <div><div style={{fontSize:10,fontWeight:800,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:5}}>{tab==="CEDIS"?"Cluster":"Región"}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{geoOpts.map(g=><FilterBtn key={g} label={g} active={fGeo===g} color={C.accent} onClick={()=>setFGeo(g)}/>)}</div>
+            </div>
+          )}
+          <div><div style={{fontSize:10,fontWeight:800,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:5}}>Sindicato</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{sinds.map(s=><FilterBtn key={s} label={s} active={fSind===s} color={C.purple} onClick={()=>setFSind(s)}/>)}</div>
+          </div>
+          <div><div style={{fontSize:10,fontWeight:800,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:5}}>Responsable Sindical</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{resps.map(r=><FilterBtn key={r} label={r} active={fResp===r} color={C.teal} onClick={()=>setFResp(r)}/>)}</div>
+          </div>
+        </div>
+
+        {/* BANNER */}
+        <div style={{background:`linear-gradient(135deg,${C.navy},#1E5FAD)`,borderRadius:12,padding:"12px 22px",marginBottom:16,display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+          <div style={{color:"#7FAAD8",fontSize:10,fontWeight:800,letterSpacing:1.5,textTransform:"uppercase"}}>Promedio Negociaciones 2026</div>
+          <div style={{display:"flex",gap:28,flexWrap:"wrap"}}>
+            {[["6.5%","Incremento Salarial",C.mint],["1.0%","Prestaciones",C.amber],["7.5%","Total General","#fff"]].map(([v,l,col])=>(
+              <div key={l} style={{textAlign:"center"}}><div style={{color:col,fontSize:26,fontWeight:900,lineHeight:1}}>{v}</div><div style={{color:"#8FBDE0",fontSize:11}}>{l}</div></div>
+            ))}
+          </div>
+          <div style={{marginLeft:"auto",color:"#6090BB",fontSize:11}}>CDS · {anio} · Consulta: 25 Jun 2026</div>
+        </div>
+
+        {/* KPIs */}
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          <KPI label="Total CCT" value={total} sub="contratos" color={C.navy}/>
+          {tab==="Consolidado"&&<><KPI label="CEDIS" value={cedisD.length} sub="centros distribución" color={C.sky}/><KPI label="Distribución" value={distD.length} sub="operación dist." color={C.purple}/></>}
+          <KPI label="Integral" value={ints.length} sub={`${total>0?Math.round(ints.length/total*100):0}% del total`} color="#2271D1"/>
+          <KPI label="Salarial" value={sals.length} sub={`${total>0?Math.round(sals.length/total*100):0}% del total`} color={C.accent}/>
+          {inics.length>0&&<KPI label="Contrato Inicial" value={inics.length} sub="nuevos" color={C.amber}/>}
+          {avgDias!=null&&<KPI label="Días Rev→Consulta" value={round1(avgDias)} sub="promedio integrales" color={C.teal}/>}
+          <KPI label="HC Promedio" value={Math.round(avgHC||0)} sub="por CCT" color={C.mint}/>
+        </div>
+
+        {/* TABLA OP */}
+        <Sec title="CCT por Operación y Tipo">
+          <div style={{overflowX:"auto"}}><table>
+            <thead><tr style={{background:C.bg}}><TH>Operación</TH><TH center>Total</TH><TH center>Integral</TH><TH center>Salarial</TH><TH center>Contrato Inicial</TH></tr></thead>
+            <tbody>
+              {opSum.map((r,i)=>(
+                <tr key={r.op} style={{background:i%2===0?"#fff":C.bg,borderBottom:`1px solid ${C.border}`}}>
+                  <TD><b>{r.op}</b></TD><TD center><b style={{color:C.navy}}>{r.total}</b></TD>
+                  <TD center><Tag label={r.integral} color="#2271D1"/></TD>
+                  <TD center><Tag label={r.salarial} color={C.accent}/></TD>
+                  <TD center>{r.inicial>0?<Tag label={r.inicial} color={C.amber}/>:<span style={{color:C.muted}}>—</span>}</TD>
+                </tr>
+              ))}
+              {tab==="Consolidado"&&<tr style={{background:C.navy+"0D",borderTop:`2px solid ${C.border}`}}>
+                <TD><b style={{color:C.navy}}>TOTAL</b></TD><TD center><b style={{color:C.navy,fontSize:15}}>{total}</b></TD>
+                <TD center><Tag label={ints.length} color="#2271D1"/></TD>
+                <TD center><Tag label={sals.length} color={C.accent}/></TD>
+                <TD center>{inics.length>0?<Tag label={inics.length} color={C.amber}/>:<span style={{color:C.muted}}>—</span>}</TD>
+              </tr>}
+            </tbody>
+          </table></div>
+        </Sec>
+
+        {/* GRÁFICA MES */}
+        <Sec title="Negociaciones por Mes — Revisión vs Vencimiento pendiente">
+          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+            <b style={{color:C.sky}}>Rev</b> = fecha de revisión realizada (dic anterior → Ene) &nbsp;·&nbsp; <b style={{color:C.amber}}>Venc</b> = contratos aún sin negociar
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={monthData} margin={{top:4,right:20,left:0,bottom:0}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+              <XAxis dataKey="mes" tick={{fontSize:11,fill:C.muted}}/>
+              <YAxis tick={{fontSize:11,fill:C.muted}} allowDecimals={false}/>
+              <Tooltip content={<Tip/>}/>
+              <Legend wrapperStyle={{fontSize:11}}/>
+              {showC&&<Bar dataKey="Rev CEDIS" fill={C.sky} radius={[4,4,0,0]}/>}
+              {showD&&<Bar dataKey="Rev Dist" fill={C.purple} radius={[4,4,0,0]}/>}
+              {showC&&<Bar dataKey="Venc CEDIS" fill={C.amber} radius={[4,4,0,0]}/>}
+              {showD&&<Bar dataKey="Venc Dist" fill="#F0933A88" radius={[4,4,0,0]}/>}
+            </BarChart>
+          </ResponsiveContainer>
+        </Sec>
+
+        {/* INTEGRALES */}
+        <Sec title="Reporte Negociaciones Integrales — Aprobación y Participación">
+          {ints.length===0?<p style={{color:C.muted}}>No hay negociaciones integrales en el filtro actual.</p>:<>
+            <div style={{display:"flex",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+              {avgPart!=null&&<div style={{background:C.mint+"18",border:`1px solid ${C.mint}44`,borderRadius:10,padding:"12px 18px",minWidth:150}}><div style={{fontSize:10,fontWeight:800,color:C.mint,letterSpacing:1.2,textTransform:"uppercase"}}>Participación Prom.</div><div style={{fontSize:28,fontWeight:900,color:C.mint}}>{pct(avgPart)}</div><div style={{fontSize:11,color:C.muted}}>{cInt.length} con dato · meta ≥85%</div></div>}
+              {avgApro!=null&&<div style={{background:C.sky+"18",border:`1px solid ${C.sky}44`,borderRadius:10,padding:"12px 18px",minWidth:150}}><div style={{fontSize:10,fontWeight:800,color:C.sky,letterSpacing:1.2,textTransform:"uppercase"}}>Aprobación Prom.</div><div style={{fontSize:28,fontWeight:900,color:C.sky}}>{pct(avgApro)}</div><div style={{fontSize:11,color:C.muted}}>meta ≥85%</div></div>}
+              {avgDias!=null&&<div style={{background:C.teal+"18",border:`1px solid ${C.teal}44`,borderRadius:10,padding:"12px 18px",minWidth:150}}><div style={{fontSize:10,fontWeight:800,color:C.teal,letterSpacing:1.2,textTransform:"uppercase"}}>Días Prom. Rev→Consulta</div><div style={{fontSize:28,fontWeight:900,color:C.teal}}>{round1(avgDias)}</div><div style={{fontSize:11,color:C.muted}}>alerta &gt;60 días</div></div>}
+            </div>
+
+            {/* Leyenda rangos */}
+            <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:10,fontWeight:800,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginRight:4}}>Rangos:</span>
+              {[["#DC2626","< 70%","Crítico"],["#D97706","70–85%","Seguimiento"],["#1E9E6B","≥ 85%","En meta"]].map(([col,rng,lbl])=>(
+                <span key={rng} style={{display:"flex",alignItems:"center",gap:5,background:col+"15",border:`1px solid ${col}44`,borderRadius:20,padding:"3px 11px"}}>
+                  <span style={{width:9,height:9,borderRadius:"50%",background:col,display:"inline-block"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:col}}>{rng}</span>
+                  <span style={{fontSize:11,color:C.muted}}>{lbl}</span>
+                </span>
+              ))}
+            </div>
+
+            {/* DOS GRÁFICAS */}
+            {cInt.length>0&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:12}}>
+                {[{key:"part",title:"% Participación"},{ key:"apro",title:"% Aprobación"}].map(({key,title})=>(
+                  <div key={key} style={{background:C.bg,borderRadius:10,padding:"12px 8px 8px"}}>
+                    <div style={{fontSize:11,fontWeight:800,color:C.navy,letterSpacing:.8,textTransform:"uppercase",marginBottom:8,textAlign:"center"}}>{title}</div>
+                    <ResponsiveContainer width="100%" height={chartH}>
+                      <BarChart data={cInt.map(r=>({name:r.plaza.length>22?r.plaza.slice(0,20)+"…":r.plaza,val:+(r[key]*100).toFixed(0),_raw:r[key]}))} layout="vertical" margin={{top:4,right:48,left:148,bottom:0}}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false}/>
+                        <XAxis type="number" domain={[0,100]} tickFormatter={v=>`${v}%`} tick={{fontSize:10,fill:C.muted}} ticks={[0,70,85,100]}/>
+                        <YAxis dataKey="name" type="category" width={140} tick={{fontSize:11,fill:C.text}} tickLine={false} axisLine={false}/>
+                        <Tooltip formatter={(v)=>[`${v}%`,title]} contentStyle={{fontSize:12,borderRadius:8}}/>
+                        <Bar dataKey="val" barSize={13} radius={[0,4,4,0]} label={{position:"right",formatter:v=>`${v}%`,fontSize:11,fontWeight:700}}>
+                          {cInt.map((r,i)=><Cell key={i} fill={colorFor(r[key])}/>)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TABLA DESGLOSE */}
+            <div style={{fontSize:10,fontWeight:800,color:C.muted,letterSpacing:1.2,textTransform:"uppercase",marginBottom:8}}>Desglose por Centro de Trabajo</div>
+            <div style={{overflowX:"auto"}}><table>
+              <thead><tr style={{background:C.bg}}>
+                <TH>Centro de Trabajo</TH><TH>Operación</TH><TH>Cluster/Región</TH>
+                <TH center>Est. Revisión</TH><TH center>Est. Consulta</TH>
+                <TH center>% Participación</TH><TH center>% Aprobación</TH><TH center>Días Rev→Consulta</TH>
+              </tr></thead>
+              <tbody>
+                {ints.map((row,i)=>{
+                  const {valor:dv,esEspera}=calcDiasEspera(row);
+                  return (
+                    <tr key={i} style={{background:i%2===0?"#fff":C.bg,borderBottom:`1px solid ${C.border}`}}>
+                      <TD><b>{row.plaza}</b></TD>
+                      <TD style={{color:C.muted}}>{row.udn}</TD>
+                      <TD style={{color:C.muted}}>{row.cluster}</TD>
+                      <TD center><Tag label={row.est_rev} color={row.est_rev==="Realizada"?C.mint:C.amber}/></TD>
+                      <TD center><Tag label={row.est_cons||"—"} color={consColor(row.est_cons)}/></TD>
+                      <TD center>{row.part!=null?<b style={{color:colorFor(row.part),fontSize:13}}>{pct(row.part)}</b>:<span style={{color:C.muted}}>—</span>}</TD>
+                      <TD center>{row.apro!=null?<b style={{color:colorFor(row.apro),fontSize:13}}>{pct(row.apro)}</b>:<span style={{color:C.muted}}>—</span>}</TD>
+                      <TD center>{dv!=null?<span style={{fontWeight:700,color:dv>60?"#DC2626":C.teal}}>{dv} días{esEspera?" ⏳":""}</span>:<span style={{color:C.muted}}>—</span>}</TD>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table></div>
+            <div style={{fontSize:11,color:C.muted,marginTop:6}}>⏳ = días desde revisión hasta hoy · 🔴 &gt;60 días = alerta</div>
+          </>}
+        </Sec>
+
+        {/* SINDICATOS + RESPONSABLES */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <Sec title="CCT por Sindicato" style={{marginBottom:0}}>
+            <table><thead><tr style={{background:C.bg}}>
+              <TH>Sindicato</TH>{tab==="Consolidado"&&<><TH center>CEDIS</TH><TH center>Dist.</TH></>}<TH center>Total</TH>
+            </tr></thead><tbody>
+              {sindT.map((r,i)=>(
+                <tr key={r.sind} style={{background:i%2===0?"#fff":C.bg,borderBottom:`1px solid ${C.border}`}}>
+                  <TD><button onClick={()=>setFSind(fSind===r.sind?"Todos":r.sind)} style={{background:"none",border:"none",color:fSind===r.sind?C.purple:C.text,fontWeight:fSind===r.sind?800:600,fontSize:12,padding:0,textDecoration:fSind===r.sind?"underline":"none"}}>{r.sind}</button></TD>
+                  {tab==="Consolidado"&&<><TD center>{r.cedis>0?r.cedis:<span style={{color:C.muted}}>—</span>}</TD><TD center>{r.dist>0?r.dist:<span style={{color:C.muted}}>—</span>}</TD></>}
+                  <TD center><Tag label={r.total} color={C.purple}/></TD>
+                </tr>
+              ))}
+            </tbody></table>
+          </Sec>
+          <Sec title="CCT por Responsable Sindical" style={{marginBottom:0}}>
+            <table><thead><tr style={{background:C.bg}}>
+              <TH>Responsable</TH>{tab==="Consolidado"&&<><TH center>CEDIS</TH><TH center>Dist.</TH></>}<TH center>Total</TH>
+            </tr></thead><tbody>
+              {respT.map((r,i)=>(
+                <tr key={r.resp} style={{background:i%2===0?"#fff":C.bg,borderBottom:`1px solid ${C.border}`}}>
+                  <TD><button onClick={()=>setFResp(fResp===r.resp?"Todos":r.resp)} style={{background:"none",border:"none",color:fResp===r.resp?C.teal:C.text,fontWeight:fResp===r.resp?800:600,fontSize:12,padding:0,textDecoration:fResp===r.resp?"underline":"none"}}>{r.resp}</button></TD>
+                  {tab==="Consolidado"&&<><TD center>{r.cedis>0?r.cedis:<span style={{color:C.muted}}>—</span>}</TD><TD center>{r.dist>0?r.dist:<span style={{color:C.muted}}>—</span>}</TD></>}
+                  <TD center><Tag label={r.total} color={C.teal}/></TD>
+                </tr>
+              ))}
+            </tbody></table>
+          </Sec>
+        </div>
+
+        {/* HC */}
+        <Sec title="HC por Contrato Colectivo (Top 15)">
+          <ResponsiveContainer width="100%" height={Math.max(180,hcData.length*34)}>
+            <BarChart data={hcData} layout="vertical" margin={{top:4,right:60,left:168,bottom:0}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false}/>
+              <XAxis type="number" tick={{fontSize:11,fill:C.muted}}/>
+              <YAxis dataKey="name" type="category" width={160} tick={{fontSize:11,fill:C.text}}/>
+              <Tooltip content={<Tip/>}/>
+              <Bar dataKey="HC" radius={[0,4,4,0]} barSize={14}>
+                {hcData.map((d,i)=><Cell key={i} fill={d.udn==="CEDIS"?C.sky:C.purple}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{display:"flex",gap:20,marginTop:8,fontSize:11,color:C.muted}}>
+            <span><span style={{background:C.sky,width:10,height:10,display:"inline-block",borderRadius:2,marginRight:4}}/>CEDIS</span>
+            <span><span style={{background:C.purple,width:10,height:10,display:"inline-block",borderRadius:2,marginRight:4}}/>Distribución</span>
+            <span style={{marginLeft:"auto"}}>HC Promedio: <b style={{color:C.navy}}>{Math.round(avgHC||0)}</b> colaboradores / CCT</span>
+          </div>
+        </Sec>
+
+        <div style={{textAlign:"center",color:C.muted,fontSize:11,paddingBottom:20}}>
+          Dashboard Laboral CDS · {anio} · Información sujeta a actualización
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<Dashboard/>);
+</script>
+</body>
+</html>
